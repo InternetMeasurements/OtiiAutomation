@@ -1,0 +1,8 @@
+logs/
+results/
+resources/
+.idea/
+test/
+notebooks/plots/
+notebooks/*.pdf
+__pycache__/

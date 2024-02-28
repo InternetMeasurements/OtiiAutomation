@@ -3,23 +3,18 @@ import json
 import itertools
 import numpy as np
 import matplotlib.pyplot as plt
+import seaborn as sns
+import avltree
 
 RATE = [1, 10, 100, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000]
 TRANSPORT = ['quic', 'tls']
-DELAY = [0, 80]
+DELAY = [0, 20, 40, 60, 80]
 PAYLOAD = ['128B']
 QUEUE_LENGTH = [0, 1, 16, 1024]
 N_ITERATION = 1
 
-AOI_PATHS = {
-    '128B_Q1024': '../results/aoi/128B_Q1024',
-    '128B_Q16': '../results/aoi/128B_Q16',
-    '128B_Q1': '../results/aoi/128B_Q1',
-    '128B_Q0': '../results/aoi/128B_Q0',
-}
 
-
-def load_data(exp_path: str):
+def load_data(exp_path: str, n_config: int) -> dict:
     with open(os.path.join(exp_path, 'summary.json'), 'r') as fin:
         summary = json.load(fin)
 
@@ -27,7 +22,7 @@ def load_data(exp_path: str):
     for config in summary:
         [i, d, _b, _ng, p, t, r, _, q] = config['trace_name'].split('\\')[-1].split('_')[0:9]
         with open(os.path.join(exp_path, f'{config["trace_name"]}_observer.json'), 'r') as fin:
-            aoi_data[((int(i) - 1) // 22, int(d), t, p, int(r), int(q))] = {
+            aoi_data[((int(i) - 1) // n_config, int(d), t, p, int(r), int(q))] = {
                 'messages': json.load(fin),
                 'energy': config['energy']['diff_ej'],
                 'time': config['energy']['diff_t'],
@@ -45,14 +40,17 @@ def compute_aoi(timestamps: list[dict]) -> tuple[list[float], list[float]]:
 
     # Compute AoI at reception of messages
     for i in range(1, len(timestamps)):
-        start_aoi = (timestamps[i - 1]['rx_ts'] - timestamps[i - 1]['gen_ts'])
-        period = (timestamps[i]['rx_ts'] - timestamps[i - 1]['rx_ts'])
+        start_aoi = timestamps[i - 1]['rx_ts'] - timestamps[i - 1]['gen_ts']
+        interarrival_time = timestamps[i]['rx_ts'] - timestamps[i - 1]['rx_ts']
 
         aoi_y.append(start_aoi / 10 ** 6)
-        aoi_y.append((start_aoi + period) / 10 ** 6)
+        aoi_y.append((start_aoi + interarrival_time) / 10 ** 6)
+
+        # Alternative
+        # aoi_y.append((timestamps[i]['rx_ts'] - timestamps[i - 1]['gen_ts']) / 10 ** 6)
 
         aoi_x.append((timestamps[i - 1]['rx_ts'] - base_rx_time) / 10 ** 9)
-        aoi_x.append((timestamps[i - 1]['rx_ts'] - base_rx_time + period) / 10 ** 9)
+        aoi_x.append((timestamps[i - 1]['rx_ts'] - base_rx_time + interarrival_time) / 10 ** 9)
 
     aoi_y.append((timestamps[-1]['rx_ts'] - timestamps[-1]['gen_ts']) / 10 ** 6)
     aoi_x.append((timestamps[-1]['rx_ts'] - base_rx_time) / 10 ** 9)
@@ -95,9 +93,73 @@ def compute_integral_mean_aoi(timestamps: list[dict]) -> float:
         triangle = (interarrival * interarrival) / 2
 
         area += (rect + triangle)
-        # area += (interarrival * ((aoi[i-1] + aoi[i-1] + interarrival) / 2))
+        # Alternative
+        # area += (interarrival * ((aoi[i-1] + (aoi[i-1] + interarrival)) / 2))
 
     return round((area / window_length) / 10 ** 6, 2)
+
+
+def compute_projection_median_n2(timestamps: list[dict]):
+    projections = []
+    extension = 0
+    for i in range(1, len(timestamps)):
+        start_aoi = timestamps[i - 1]['rx_ts'] - timestamps[i - 1]['gen_ts']
+        end_aoi = timestamps[i]['rx_ts'] - timestamps[i - 1]['gen_ts']
+        extension += (end_aoi - start_aoi)
+        projections.append(start_aoi)
+        projections.append(end_aoi)
+
+    intervals = []
+    for i in range(1, len(projections)):
+        intervals.append({'interval': (projections[i - 1], projections[i]), 'count': 0})
+
+    for i in range(1, len(timestamps)):
+        start_aoi = timestamps[i - 1]['rx_ts'] - timestamps[i - 1]['gen_ts']
+        end_aoi = timestamps[i]['rx_ts'] - timestamps[i - 1]['gen_ts']
+        for interval in intervals:
+            if (interval['interval'][0] >= start_aoi) and (interval['interval'][1] <= end_aoi):
+                interval['count'] += 1
+                extension += (interval['interval'][1] - interval['interval'][0])
+            elif interval['interval'][1] > end_aoi:
+                break
+
+    curr_ext = 0
+    j = 0
+    for interval in intervals:
+        interval_len = interval['interval'][1] - interval['interval'][0]
+        if curr_ext + (interval_len * interval['count']) > (extension / 2):
+            break
+        else:
+            curr_ext += (interval_len * interval['count'])
+        j += 1
+
+    return (intervals[j]['interval'][0] + (extension / 2 - curr_ext) / intervals[j]['count']) / 10 ** 6
+
+
+def compute_projection_median(timestamps: list[dict]):
+    projections = []
+    extension = 0
+
+    for i in range(1, len(timestamps)):
+        start_aoi = timestamps[i - 1]['rx_ts'] - timestamps[i - 1]['gen_ts']
+        end_aoi = timestamps[i]['rx_ts'] - timestamps[i - 1]['gen_ts']
+        projections.append((start_aoi, 1))
+        projections.append((end_aoi, -1))
+        extension += (end_aoi - start_aoi)
+
+    projections.sort(key=lambda x: x[0])
+
+    weight = 0
+    curr_ext = 0
+    start = None
+    for projection in projections:
+        if start is not None:
+            segment = projection[0] - start
+            if curr_ext + segment * weight >= extension / 2:
+                return (start + (extension / 2 - curr_ext) / weight) / 10 ** 6
+            curr_ext += segment * weight
+        weight += projection[1]
+        start = projection[0]
 
 
 def check_median(timestamps: list[dict], median: float) -> tuple[float, float]:
@@ -164,7 +226,7 @@ def plot_time_evolution(title, aoi_x, aoi_y, mean, median, **kwargs) -> None:
     plt.show()
 
 
-def plot_series(mean_aoi: dict, median_aoi: dict, total_energy: dict, true_rate: dict, **kwargs):
+def plot_series(mean_aoi: dict, median_aoi: dict, total_energy: dict, true_rate: dict, **kwargs) -> None:
     # AoI vs Rate (mean)
     fig, ax = plt.subplots(1, 1, figsize=(20, 5))
     ax.set_xlabel('Rate [msg/s])')
@@ -198,7 +260,7 @@ def plot_series(mean_aoi: dict, median_aoi: dict, total_energy: dict, true_rate:
     fig.legend()
 
 
-def plot_pareto(mean_aoi, median_aoi, total_energy, time, **kwargs):
+def plot_pareto(mean_aoi: dict, median_aoi: dict, total_energy: dict, time: dict, **kwargs) -> None:
     expected_rate = kwargs.get('rate', RATE)
     fig, ax = plt.subplots(1, 1, figsize=(20, 5))
     ax.set_title(f'Pareto Efficiency ({kwargs.get("metric", "mean").capitalize()})')
@@ -207,23 +269,26 @@ def plot_pareto(mean_aoi, median_aoi, total_energy, time, **kwargs):
     ax.set_xscale(kwargs.get('aoi_yscale', 'linear'))
     max_power = 0
     max_aoi = 0
+    colors = {'quic': iter(sns.color_palette()), 'tls': iter(sns.color_palette())}
+    markers = {'quic': 'o', 'tls': 'x'}
     for config in mean_aoi.keys():
         aoi = mean_aoi[config] if kwargs.get('metric', 'mean') == 'mean' else median_aoi[config]
         power = np.divide(total_energy[config], time[config])
         max_aoi = max(max_aoi, max(aoi))
         max_power = max(max_power, max(power))
-        ax.scatter(aoi, power, label=config, marker='o' if 'quic' in config else 'x')
+        transport = 'quic' if 'quic' in config else 'tls'
+        ax.scatter(aoi, power, label=config, marker=markers[transport], color=next(colors[transport]))
         for i, r in enumerate(expected_rate):
             ax.annotate(convert_rate(r), (aoi[i], power[i]))
 
-    ax.set_xlim(0,max_aoi * 1.1)
+    ax.set_xlim(0, max_aoi * 1.1)
     ax.set_ylim(0, max_power * 1.1)
 
     fig.legend()
     plt.show()
 
 
-def analyse_experiment(exp_data, **kwargs):
+def analyse_experiment(exp_data: dict, **kwargs) -> dict:
     iteration_series = {
         'mean_aoi': {},
         'median_aoi': {},
@@ -242,7 +307,7 @@ def analyse_experiment(exp_data, **kwargs):
             print(f'\n*** Iteration {it} ***\n')
 
         # Iterate over all possible configurations
-        for (d, t, p, r, q) in itertools.product(DELAY, TRANSPORT, PAYLOAD, kwargs.get('rate', RATE), QUEUE_LENGTH):
+        for (d, p, q, t, r) in itertools.product(DELAY, PAYLOAD, QUEUE_LENGTH, TRANSPORT, kwargs.get('rate', RATE)):
             if (it, d, t, p, r, q) not in exp_data:
                 continue
 
@@ -259,7 +324,7 @@ def analyse_experiment(exp_data, **kwargs):
             mean_aoi = compute_integral_mean_aoi(timestamps)
 
             # Compute median AoI
-            median_aoi = np.median(aoi_y[:-1])
+            median_aoi = compute_projection_median(timestamps)
             above, below = check_median(timestamps, median_aoi)
 
             curr_config = f'D{d}-{t}-P{p}-Q{q}'
@@ -339,7 +404,7 @@ def analyse_experiment(exp_data, **kwargs):
     return iteration_series
 
 
-def pareto(series: list[dict], **kwargs):
+def pareto(*args, **kwargs) -> None:
     all_series = {
         'mean_aoi': {},
         'median_aoi': {},
@@ -347,7 +412,8 @@ def pareto(series: list[dict], **kwargs):
         'time': {},
         'true_rate': {}
     }
-    for serie in series:
+
+    for serie in args:
         for metric in serie.keys():
             all_series[metric].update(serie[metric])
 
@@ -376,7 +442,7 @@ def pareto(series: list[dict], **kwargs):
     plot_pareto(mean_aoi, median_aoi, mean_energy, mean_time, **kwargs)
 
 
-def fast_aoi(path: str = '../results/observer.json'):
+def fast_aoi(path: str = '../results/observer.json') -> None:
     with open(path, 'r') as fin:
         timestamps = json.load(fin)
 
@@ -390,7 +456,7 @@ def fast_aoi(path: str = '../results/observer.json'):
     mean_aoi = compute_integral_mean_aoi(timestamps)
 
     # Compute median AoI
-    median_aoi = np.median(aoi_y[:-1])
+    median_aoi = compute_projection_median(timestamps)
     above, below = np.round(check_median(timestamps, median_aoi), 3)
 
     # Queue time

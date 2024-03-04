@@ -5,6 +5,7 @@ import seaborn as sns
 from .parameters import *
 from ..util import convert_rate
 
+RATES = [1, 10, 100, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000]
 
 def plot_time_evolution(title, aoi_x, aoi_y, mean, median, **kwargs) -> None:
     fig, ax = plt.subplots(1, 1, figsize=(20, 5))
@@ -21,6 +22,19 @@ def plot_time_evolution(title, aoi_x, aoi_y, mean, median, **kwargs) -> None:
     if median is not None:
         ax.plot([0, aoi_x[-1]], [median, median], linestyle='--', color='green', label='Median AoI')
 
+    plt.show()
+
+
+def plot_rates(rates, **kwargs) -> None:
+    fig, ax = plt.subplots(1, 1, figsize=(20, 5))
+    ax.set_title('True vs Nominal Rate')
+    ax.set_xlabel('Nominal Rate [msg/s]')
+    ax.set_ylabel('Real Rate [msg/s]')
+
+    for config, rate in rates.items():
+        ax.plot(RATES, rate, marker='o', label=config)
+
+    ax.legend()
     plt.show()
 
 
@@ -65,14 +79,18 @@ def plot_pareto(mean_aoi: dict, median_aoi: dict, total_energy: dict, time: dict
     ax.set_ylabel('Power [W]')
     ax.set_xscale(kwargs.get('aoi_yscale', 'linear'))
 
-    # max_power = 0
-    # max_aoi = 0
     aoi_values = np.ravel([aoi for aoi in median_aoi.values()])
     power_values = np.ravel([np.divide(energy, time) for energy, time in zip(total_energy.values(), time.values())])
-    colors = {'quic': iter(sns.color_palette()), 'tls': iter(sns.color_palette())}
+    queue_color = {
+        'Q0': 'red',
+        'Q1': 'orange',
+        'Q16': 'green',
+        'Q1024': 'blue'
+    }
     markers = {'quic': 'o', 'tls': 'x'}
     front = []
     for config in mean_aoi.keys():
+        queue = config.split('-')[-1]
         aoi = np.ravel(mean_aoi[config] if kwargs.get('metric', 'mean') == 'mean' else median_aoi[config])
         power = np.ravel(np.divide(total_energy[config], time[config]))
 
@@ -93,7 +111,7 @@ def plot_pareto(mean_aoi: dict, median_aoi: dict, total_energy: dict, time: dict
         ax.scatter(*[list(i) for i in zip(*config_front)],
                    label=config,
                    marker=markers[transport],
-                   color=next(colors[transport]))
+                   color=queue_color[queue])
 
     for point in front:
         ax.annotate(convert_rate(point[1]), point[2])
@@ -107,7 +125,7 @@ def plot_pareto(mean_aoi: dict, median_aoi: dict, total_energy: dict, time: dict
         pareto_front['rate'].append(point[1])
 
     ax.plot(pareto_front['aoi'], pareto_front['power'], label='Pareto front', color='gray', linestyle='dotted')
-    ax.set_xlim(0, 650)
+    ax.set_xlim(0, 250)
     ax.set_ylim(0, 3)
 
     ax.grid(linestyle='--', linewidth=0.5)

@@ -4,7 +4,7 @@ import json
 import itertools
 import numpy as np
 
-from .plots import plot_time_evolution, plot_series, plot_pareto
+from .plots import plot_time_evolution, plot_series, plot_pareto, plot_rates
 from .parameters import *
 
 
@@ -355,7 +355,7 @@ def fast_aoi(path: str = '../results/observer.json') -> None:
     plot_time_evolution('AoI time evolution', aoi_x, aoi_y, mean_aoi, median_aoi)
 
 
-def fast_pareto(all_series: dict, **kwargs) -> list:
+def fast_pareto(all_series: dict, **kwargs) -> dict:
     mean_aoi = {}
     median_aoi = {}
     mean_energy = {}
@@ -377,6 +377,7 @@ def fast_pareto(all_series: dict, **kwargs) -> list:
     for config, value in all_series['true_rate'].items():
         true_rate[config] = np.mean(value, axis=0).tolist()
 
+    plot_rates(true_rate, **kwargs)
     plot_series(mean_aoi, median_aoi, mean_energy, true_rate, **kwargs)
     front = plot_pareto(mean_aoi, median_aoi, mean_energy, mean_time, **kwargs)
 

@@ -32,7 +32,7 @@ def plot_rates(rates, **kwargs) -> None:
     ax.set_ylabel('Real Rate [msg/s]')
 
     for config, rate in rates.items():
-        ax.plot(RATES, rate, marker='o', label=config)
+        ax.plot(RATES[:len(rate)], rate, marker='o', label=config)
 
     ax.legend()
     plt.show()
@@ -125,8 +125,9 @@ def plot_pareto(mean_aoi: dict, median_aoi: dict, total_energy: dict, time: dict
         pareto_front['rate'].append(point[1])
 
     ax.plot(pareto_front['aoi'], pareto_front['power'], label='Pareto front', color='gray', linestyle='dotted')
-    ax.set_xlim(0, 250)
-    ax.set_ylim(0, 3)
+    if kwargs.get('x_lim', None) is not None:
+        ax.set_xlim(0, kwargs.get('x_lim'))
+    ax.set_ylim(0, max(pareto_front['power']) * 1.1)
 
     ax.grid(linestyle='--', linewidth=0.5)
     fig.legend()

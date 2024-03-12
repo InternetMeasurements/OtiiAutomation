@@ -56,22 +56,23 @@ def compute_integral_mean_aoi(timestamps: list[dict]) -> float:
     aoi = []
     window_length = timestamps[-1]['rx_ts'] - timestamps[0]['rx_ts']
 
-    for ts in timestamps:
-        aoi.append(ts['rx_ts'] - ts['gen_ts'])
+    # for ts in timestamps:
+    #     aoi.append(ts['rx_ts'] - ts['gen_ts'])
 
     area = 0
-    for i in range(1, len(aoi)):
+    for i in range(1, len(timestamps)):
+        aoi = timestamps[i - 1]['rx_ts'] - timestamps[i - 1]['gen_ts']
         interarrival = timestamps[i]['rx_ts'] - timestamps[i - 1]['rx_ts']
         if interarrival == 0:
             continue
-        rect = interarrival * aoi[i - 1]
+        rect = interarrival * aoi
         triangle = (interarrival * interarrival) / 2
 
         area += (rect + triangle)
         # Alternative
         # area += (interarrival * ((aoi[i-1] + (aoi[i-1] + interarrival)) / 2))
 
-    return round((area / window_length) / 10 ** 6, 2)
+    return (area / window_length) / 10 ** 6
 
 
 def compute_projection_median(timestamps: list[dict]):

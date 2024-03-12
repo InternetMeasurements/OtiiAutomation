@@ -11,8 +11,6 @@ def observer():
     obs.stop_observing()
     obs.dump_observed('results/observer.json')
 
-    fast_aoi('results/observer.json')
-
 
 if __name__ == '__main__':
     observer()

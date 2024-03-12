@@ -30,3 +30,17 @@ def convert_rate(rate: int) -> str:
         return f'{mod}D'
 
     return f'{rate}'
+
+
+def get_network_status(summary: list[dict]) -> list:
+    network_status = []
+    for config in summary:
+        lte, opmode, mcc_mnc, tac, sCellId, pCellId, fr_mode, earn, dlbw, ulbw, rsrq, rsrp, rssi, rssnr = \
+            config['device']['network_status'][-1]['AT+CPSI?'].strip().split('\n')[1].split(':')[-1].strip().split(',')
+        network_status.append({
+            'rsrq': int(rsrq),
+            'rsrp': int(rsrp),
+            'rssi': int(rssi),
+            'rssnr': int(rssnr)
+        })
+    return network_status

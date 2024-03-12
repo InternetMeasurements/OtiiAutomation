@@ -4,7 +4,7 @@
 
 ### Controller side (laptop)
 ```bash
-python3 controller --config <path-to-the-config-file>
+python3 main.py controller --config <path-to-the-config-file>
 ```
 
 ### Device side (Raspberry Pi)

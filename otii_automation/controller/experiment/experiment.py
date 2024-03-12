@@ -1,11 +1,14 @@
 import itertools
 import random
+import time
 
 from ...environment import Environment
 
 
 class Experiment:
     def __init__(self):
+        self.seed = time.time_ns()
+        random.seed(self.seed)
         param_values = []
         param_names = []
         for param in Environment.config['params'].values():

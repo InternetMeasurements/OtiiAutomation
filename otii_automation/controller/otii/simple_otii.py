@@ -1,6 +1,7 @@
 import logging
 import os
 import time
+import traceback
 
 from otii_tcp_client.otii import Otii
 from otii_tcp_client.otii_connection import OtiiConnection
@@ -52,17 +53,17 @@ class SimpleOtii:
 
         return recording.get_channel_statistics(self.arc.id, 'mc', start, stop)
 
-    def send(self, code: Message, payload: dict = None, udt=False) -> None:
+    def send(self, code: Message, payload: dict = None, **kwargs) -> None:
         """ Send message on uart channel """
 
-        if udt:
+        if kwargs.get('udt', False) is True:
             self.rdt.udt_send(code, payload)
         else:
-            self.rdt.send(code, payload)
+            self.rdt.send(code, payload, **kwargs)
 
-    def receive(self) -> [dict, float]:
+    def receive(self, timeout=None) -> [dict, float]:
         """ Receive message from uart channel """
-        return self.rdt.receive()
+        return self.rdt.receive(timeout)
 
     def reset(self, project_path: str) -> None:
         """ Reset Otii device """
@@ -71,10 +72,12 @@ class SimpleOtii:
             self.otii.connection.close_connection()
         except Exception as ex:
             logger.warning(f'Failed to release resources during reset: {ex}')
+            logger.error(traceback.format_exc())
 
         new_connection = OtiiConnection(Env.config['otii']['hostname'], Env.config['otii']['port'])
-        new_connection.connect_to_server(try_for_seconds=3)
+        new_connection.connect_to_server(try_for_seconds=10)
         self.otii = Otii(new_connection)
+        time.sleep(3)
         self.otii.login(Env.config['otii']['license_user'], Env.config['otii']['license_psw'])
 
         if project_path is not None:

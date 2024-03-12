@@ -27,7 +27,7 @@ class Rdt:
 
         return json.loads(msg), timestamp
 
-    def send(self, code: Message, payload: dict = None) -> None:
+    def send(self, code: Message, payload: dict = None, **kwargs) -> None:
         if payload is None:
             msg = json.dumps({'code': code.value})
         else:
@@ -38,15 +38,17 @@ class Rdt:
         ack = False
         while not ack:
             self.udt.send(rdt_pkt)
-            ack = self._recv_ack()
+            ack = self._recv_ack() or kwargs.get('no_ack', False)
 
         logger.debug(f'Sent: {msg}')
+
+        # Update tx_ctr
         self.tx_ctr = (self.tx_ctr + 1) % MAX_CTR
 
-    def receive(self) -> [dict, float]:
+    def receive(self, timeout=None) -> [dict, float]:
         msg = ''
         while True:
-            rdt_pkt, timestamp = self.udt.receive()
+            rdt_pkt, timestamp = self.udt.receive(timeout=timeout)
             if len(rdt_pkt) < 3:
                 self._send_ack(nack=True)
                 continue
@@ -61,14 +63,20 @@ class Rdt:
                 self._send_ack(nack=True)
 
         logger.debug(f"Received: {msg}")
-        return json.loads(msg), timestamp
+
+        # Parse message
+        json_msg = json.loads(msg)
+
+        # Update rx_ctr
+        self.rx_ctr = (self.rx_ctr + 1) % MAX_CTR
+
+        return json_msg, timestamp
 
     def _send_ack(self, nack=False) -> None:
         if nack:
             ctr = ((self.rx_ctr - 1) % MAX_CTR).to_bytes(2, byteorder='big')
         else:
             ctr = self.rx_ctr.to_bytes(2, byteorder='big')
-            self.rx_ctr = (self.rx_ctr + 1) % MAX_CTR
 
         ack = crc_8(ctr)
         self.udt.send(ack)
@@ -77,8 +85,11 @@ class Rdt:
 
     def _recv_ack(self) -> bool:
         ack, _ = self.udt.receive(timeout=8)
+        if ack == '':
+            return False
         if len(ack) != 2:
             logger.debug(f'Duplicated message: {ack}')
+            # Send nack (ack for the previous message)
             self._send_ack(nack=True)
             return False
         if ack == crc_8(self.tx_ctr.to_bytes(2, byteorder='big')):

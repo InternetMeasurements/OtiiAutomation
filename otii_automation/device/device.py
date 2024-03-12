@@ -5,24 +5,24 @@ import json
 import time
 import subprocess
 
-from .util import sync_clock, logger, network_status, parse_payload_size, upload_results, upload_logs
+from .util import sync_clock, logger, network_status, parse_payload_size, upload_results, upload_logs, iface_up_cmd
+from .protocols import publish_rawmqtt
+from .at_command import config_radio_5G, config_radio_4G
+from .protocols.mqtt import aoi_rawmqtt
 from ..rdt import Rdt
 from ..rdt.message import Message
 from ..rdt.udt.uart_serial import UdtUartSerial
 from ..environment import Environment as Env
 
-from .protocols import publish_rawmqtt
-from .at_command import config_radio_5G, config_radio_4G
-from .protocols.mqtt import aoi_rawmqtt
+rdt = Rdt(UdtUartSerial('/dev/ttyS0'))
 
-RESULT_BASE_DIR = 'results'
-
-rdt = Rdt(UdtUartSerial('/dev/ttyS0', None))
+server_config = None
 
 
 def start_configuration(config):
     """ Start configuration """
-    iface_up_cmd = 'sudo ifconfig eth0 up'
+
+    global server_config
 
     timestamps = {
         'launch': int(time.time_ns())
@@ -98,11 +98,13 @@ def start_configuration(config):
 
     upload_results(config['server'], local_results, config['results_dir'].split('/')[-1])
     upload_logs(config['server'], Env.log_file)
+    server_config = config['server']
 
     # Wait for idle network card
-    time.sleep(25)
+    if config['experiment'] != 'aoi':
+        time.sleep(25)
 
-    # Notify configuration terminates
+    # Notify configuration completed
     rdt.send(Message.STOP_CONFIG)
     logger.info("Configuration completed")
 
@@ -121,9 +123,13 @@ def device():
                 logger.info('Experiment concluded')
                 break
             else:
-                logger.warning(f'Unknown command: {message}')
-
+                raise Exception(f'Unknown command: {message}')
         except Exception as ex:
-            logger.error(f'Fatal exception: {ex}')
+            logger.error(f'Exception on device: {ex}')
             logger.error(traceback.format_exc())
             rdt.send(Message.ERROR)
+
+    if server_config is not None:
+        upload_logs(server_config, Env.log_file)
+
+    subprocess.run(iface_up_cmd.split(), stdout=subprocess.PIPE, stderr=subprocess.STDOUT)

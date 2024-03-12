@@ -1,5 +1,6 @@
 import json
 import os
+import time
 import traceback
 from time import sleep
 
@@ -29,12 +30,15 @@ def launch_config(params: dict) -> bool:
     }
 
     # Set network bandwidth and delay
-    set_bandwidth_and_delay(params['bandwidth'], None, params['delay'])
+    set_bandwidth_and_delay(params['bandwidth'], params['bandwidth'], params['delay'])
     logger.info(f'Network constraints configured')
 
     # Start trace recording on Otii
     otii.start_recording()
     logger.info(f'Recording started')
+
+    # Clean observer buffer
+    observer.clean()
 
     # Send configuration message to device via UART
     otii.send(Message.START_CONFIG, build_config_message(params, trace))
@@ -42,7 +46,7 @@ def launch_config(params: dict) -> bool:
 
     # Wait for device to complete configuration
     while True:
-        message, timestamp = otii.receive()
+        message, timestamp = otii.receive(timeout=300)
         results['messages'].append({'timestamp': timestamp, 'message': message['code']})
 
         if message['code'] == Message.START_REQ.value:
@@ -108,6 +112,12 @@ def controller() -> None:
         observer.start_observing()
         init_bandwidth_and_delay()
         experiment = Experiment()
+        meta = Env.config['meta']
+        meta['seed'] = experiment.seed
+        meta['config'] = Env.config['params']
+        meta['config'].update(Env.config['params'])
+        with open(os.path.join(Env.base_dir, 'meta.json'), 'w') as fp:
+            json.dump(meta, fp, indent=1)
         logger.info('Initialization completed')
     except Exception as ex:
         logger.error(f'Initialization failed: {ex}')
@@ -130,7 +140,7 @@ def controller() -> None:
                     except Exception as ex:
                         logger.error(f'Configuration failed: {ex}')
                         logger.error(traceback.format_exc())
-                        sleep(5)
+                        sleep(10)
                         project_path = os.path.join(Env.otii_dir, f'Iteration_{it}') if Env.trace_counter > 0 else None
                         otii.reset(project_path)
 
@@ -139,8 +149,13 @@ def controller() -> None:
             logger.info(f'Iteration {it} completed\n')
             Env.iteration += 1
 
-        # Send multiple times for reliability
-        otii.send(Message.END_EXPERIMENT)
+        # End experiment
+        for _ in range(3):
+            otii.send(Message.END_EXPERIMENT, no_ack=True)
+
+        # Download device logs
+        time.sleep(5)
+        download_device_logs()
 
         logger.info('Experiment completed')
     except Exception as ex:

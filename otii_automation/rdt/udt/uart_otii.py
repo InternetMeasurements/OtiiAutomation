@@ -26,14 +26,14 @@ class UdtUartOtii:
         logger.debug(f'Receiving from uart channel...')
 
         start_recv = time.time()
-        while (self.recording.get_channel_data_count(self.arc.id, "rx") - self.c_msg) == 0:
+        while (self.recording.get_channel_data_count(self.arc.id, 'rx') - self.c_msg) == 0:
             if timeout is not None and time.time() - start_recv > timeout:
                 logger.debug(f'Timeout expired')
                 return '', 0
 
         rx_data = self.recording.get_channel_data(
             self.arc.id,
-            channel="rx",
+            channel='rx',
             index=self.c_msg,
             count=1
         )

@@ -4,14 +4,14 @@ from .util import logger
 
 
 class UdtUartSerial:
-    def __init__(self, port, timeout):
+    def __init__(self, port):
         self.ser = serial.Serial(
             port=port,
             baudrate=115200,
             parity=serial.PARITY_NONE,
             stopbits=serial.STOPBITS_ONE,
             bytesize=serial.EIGHTBITS,
-            timeout=timeout
+            timeout=None
         )
 
         # Open connection is not already opened

@@ -29,7 +29,7 @@ class Environment(object):
 
             # Argument parser
             parser = ArgumentParser(description='Launch experiment')
-            subparsers = parser.add_subparsers(help='Experiment side sub-commands', dest='mode', required=experiment)
+            subparsers = parser.add_subparsers(help='Experiment side sub-commands', dest='mode', required=True)
 
             # Controller arguments parser
             parser_controller = subparsers.add_parser('controller', help='Launch experiment on controller side')
@@ -41,7 +41,7 @@ class Environment(object):
 
             # Retrieve configuration
             args = parser.parse_args()
-            if Mode.valueOf(args.mode) == Mode.CONTROLLER or not experiment:
+            if Mode.valueOf(args.mode) == Mode.CONTROLLER:
                 with open(args.config[0], 'rb') as fin:
                     cls.config: dict = tomli.load(fin)
                 if not experiment:

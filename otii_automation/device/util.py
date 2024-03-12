@@ -11,6 +11,7 @@ from string import ascii_letters
 from .at_command import send_commands
 
 logger = logging.getLogger('device')
+iface_up_cmd = 'sudo ifconfig eth0 up'
 
 
 def parse_payload_size(payload_size):

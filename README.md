@@ -1,13 +1,11 @@
 # OtiiAutomation
 
----
-
 ## Environment
 The script has been tested on a Python 3.11 environment for the controller and Python 3.7 for the device.
 
 ### Required Packages
 
-The following packages are required to run the code:
+The following packages are required for the experiment script:
 
 <table>
     <caption><b>Controller side packages and versions</b></caption>
@@ -129,9 +127,8 @@ python3 -m pip install -U pip
 sudo apt-get install build-essential libssl-dev libffi-dev python3-dev cargo pkg-config
 pip3 install -r requirements_device.txt
 ```
----
 
-## Running experiments
+## Running the experiments
 
 ### Controller side (laptop)
 ```bash

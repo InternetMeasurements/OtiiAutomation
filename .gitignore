@@ -6,3 +6,4 @@ test/
 notebooks/plots/
 notebooks/*.pdf
 __pycache__/
+venv/

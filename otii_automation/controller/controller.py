@@ -141,7 +141,8 @@ def controller() -> None:
                         logger.error(f'Configuration failed: {ex}')
                         logger.error(traceback.format_exc())
                         sleep(10)
-                        project_path = os.path.join(Env.otii_dir, f'Iteration_{it}') if Env.trace_counter > 0 else None
+                        project_path = os.path.join(Env.otii_dir, f'Iteration_{it}') if (
+                                (Env.trace_counter % len(experiment)) == 1) else None
                         otii.reset(project_path)
 
                 Env.trace_counter += 1

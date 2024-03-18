@@ -125,11 +125,11 @@ def device():
             else:
                 raise Exception(f'Unknown command: {message}')
         except Exception as ex:
+            subprocess.run(iface_up_cmd.split(), stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             logger.error(f'Exception on device: {ex}')
             logger.error(traceback.format_exc())
             rdt.send(Message.ERROR)
 
+    # Upload final logs
     if server_config is not None:
         upload_logs(server_config, Env.log_file)
-
-    subprocess.run(iface_up_cmd.split(), stdout=subprocess.PIPE, stderr=subprocess.STDOUT)

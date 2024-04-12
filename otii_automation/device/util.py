@@ -31,7 +31,10 @@ def parse_payload_size(payload_size):
 
 def sync_clock():
     """ Sync system clock with NTP server """
-    query_sync_cmds = ['timedatectl', 'sudo ntpdate 169.254.250.244']
+    query_sync_cmds = [
+        # 'timedatectl',
+        'sudo ntpdate -q 169.254.250.244'
+    ]
     sync_cmd = 'sudo ntpdate 169.254.250.244'
     iface_down_cmd = 'sudo ifconfig eth0 down'
 
@@ -44,7 +47,10 @@ def sync_clock():
             subprocess.run(cmd.split(), stdout=subprocess.PIPE, stderr=subprocess.STDOUT).stdout.decode())
 
     # Force clock synchronization
-    sync_res = subprocess.run(sync_cmd.split(), stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    for _ in range(5):
+        sync_res = subprocess.run(sync_cmd.split(), stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        if abs(float(sync_res.stdout.decode().strip().split(' ')[-2])) * 1000 < 10:
+            break
 
     # Check clock offset after sync
     post_sync_res = []

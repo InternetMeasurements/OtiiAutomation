@@ -27,7 +27,7 @@ def publish_rawmqtt(host, port, transport, qos, topic, payload):
     # Run command
     start_time = time.time_ns()
 
-    result = subprocess.run(cmd.split(), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    result = subprocess.run(cmd.split(), stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
 
     stop_time = time.time_ns()
 
@@ -35,11 +35,17 @@ def publish_rawmqtt(host, port, transport, qos, topic, payload):
 
 
 def aoi_rawmqtt(host, port, transport, qos, topic, payload, rate, duration, queue):
+    nagle = ''
+    if transport == 'tls-nagle-off':
+        transport = 'tls'
+        nagle = '--nagle-off'
+
     # Build shell command
     cmd = f'raw-mqtt-stream-cli publish --host {host} --port {port} --transport {transport} --topic {topic} ' \
-          f'--size {payload} --qos {qos} --rate {rate} --duration {duration} --queue {queue} --insecure --keep-alive 10'
+          f'--size {payload} --qos {qos} --rate {rate} --duration {duration} --queue {queue} {nagle} ' \
+          f'--insecure --keep-alive 10'
 
     # Run command
-    result = subprocess.run(cmd.split(), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    result = subprocess.run(cmd.split(), stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
 
     return result

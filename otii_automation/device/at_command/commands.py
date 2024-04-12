@@ -1,4 +1,5 @@
 from serial import Serial
+from serial.tools.list_ports import comports
 import logging
 import time
 
@@ -13,13 +14,13 @@ def send_command(command, channel=None):
         channel = Serial(SERIAL_PORT, BAUDRATE)
 
     channel.write(bytes(f'{command}\r\n', 'UTF-8'))
-    time.sleep(0.5)
+    # time.sleep(0.5)
 
     output = None
     if channel.in_waiting:
-        time.sleep(0.01)
+        time.sleep(0.1)
         output = channel.read(channel.in_waiting).decode('UTF-8')
-        logging.debug(f'{command} - {output}')
+        logging.debug(f'{command}')
 
     return output
 
@@ -70,3 +71,25 @@ def config_radio_5G():
             time.sleep(0.5)
             ret = send_command('AT+CPSI?', channel)
             logging.debug(ret)
+
+
+def reset_nic():
+    """ Reset the module """
+
+    global SERIAL_PORT
+
+    # Send reset AT command
+    with Serial(SERIAL_PORT, BAUDRATE) as channel:
+        send_command('AT+CFUN=6', channel)
+        logging.info('Module reset')
+
+    # Wait for module to be ready
+    time.sleep(60)
+
+    # Check module ready
+    for port in comports():
+        if port.location == '1-1.3:1.4':
+            SERIAL_PORT = port.device
+            send_command('AT+CFUN?')
+            logging.info('Module ready!')
+            break

@@ -22,14 +22,8 @@ def convert_rate(rate: int) -> str:
     mod = rate // 1000
     if mod > 0:
         return f'{mod}K'
-    mod = rate // 100
-    if mod > 0:
-        return f'{mod}C'
-    mod = rate // 10
-    if mod > 0:
-        return f'{mod}D'
-
-    return f'{rate}'
+    else:
+        return f'{rate}'
 
 
 def get_network_status(summary: list[dict]) -> list:

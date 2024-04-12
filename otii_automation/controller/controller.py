@@ -11,6 +11,7 @@ from .otii import SimpleOtii
 from .traffic_control import restore_bandwidth_and_delay, init_bandwidth_and_delay, set_bandwidth_and_delay
 from .observer import Observer
 from .util import download_results, logger, build_config_message, build_trace_name, download_device_logs
+from ..rdt.exception import RdtException
 
 otii: SimpleOtii
 observer: Observer
@@ -21,14 +22,6 @@ def launch_config(params: dict) -> bool:
 
     logger.info(f'Start configuration: {trace}')
 
-    results = {
-        'trace_name': trace,
-        'energy': None,
-        'device': None,
-        'messages': [],
-        'config': params
-    }
-
     # Set network bandwidth and delay
     set_bandwidth_and_delay(params['bandwidth'], params['bandwidth'], params['delay'])
     logger.info(f'Network constraints configured')
@@ -37,28 +30,42 @@ def launch_config(params: dict) -> bool:
     otii.start_recording()
     logger.info(f'Recording started')
 
-    # Clean observer buffer
-    observer.clean()
-
     # Send configuration message to device via UART
     otii.send(Message.START_CONFIG, build_config_message(params, trace))
     logger.info(f'Configuration message sent')
 
-    # Wait for device to complete configuration
     while True:
-        message, timestamp = otii.receive(timeout=300)
-        results['messages'].append({'timestamp': timestamp, 'message': message['code']})
 
-        if message['code'] == Message.START_REQ.value:
-            results['req_start'] = timestamp
-            logger.info('Request start')
-        elif message['code'] == Message.STOP_REQ.value:
-            results['req_stop'] = timestamp
-            logger.info('Request stop')
-        elif message['code'] == Message.STOP_CONFIG.value:
+        results = {
+            'trace_name': trace,
+            'energy': None,
+            'device': None,
+            'messages': [],
+            'config': params
+        }
+
+        # Clean observer buffer
+        observer.clean()
+
+        # Wait for device to complete configuration
+        while True:
+            message, timestamp = otii.receive(timeout=150)
+            results['messages'].append({'timestamp': timestamp, 'message': message['code']})
+
+            if message['code'] == Message.START_REQ.value:
+                results['req_start'] = timestamp
+                logger.info('Request start')
+                sleep(50)
+            elif message['code'] == Message.STOP_REQ.value:
+                results['req_stop'] = timestamp
+                logger.info('Request stop')
+            elif message['code'] == Message.STOP_CONFIG.value:
+                break
+            else:
+                raise Exception(f'Error on device: {message}')
+
+        if len(results['messages']) == 3:
             break
-        else:
-            raise Exception(f'Error on device: {message}')
 
     # Stop trace recording on Otii
     otii.stop_recording(trace)
@@ -140,10 +147,12 @@ def controller() -> None:
                     except Exception as ex:
                         logger.error(f'Configuration failed: {ex}')
                         logger.error(traceback.format_exc())
-                        sleep(10)
-                        project_path = os.path.join(Env.otii_dir, f'Iteration_{it}') if (
-                                (Env.trace_counter % len(experiment)) == 1) else None
-                        otii.reset(project_path)
+
+                        if not isinstance(ex, RdtException):
+                            sleep(10)
+                            project_path = os.path.join(Env.otii_dir, f'Iteration_{it}') if (
+                                    (Env.trace_counter % len(experiment)) != 1) else None
+                            otii.reset(project_path)
 
                 Env.trace_counter += 1
 

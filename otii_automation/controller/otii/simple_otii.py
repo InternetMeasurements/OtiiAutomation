@@ -59,7 +59,7 @@ class SimpleOtii:
         if kwargs.get('udt', False) is True:
             self.rdt.udt_send(code, payload)
         else:
-            self.rdt.send(code, payload, **kwargs)
+            self.rdt.send(code, payload)
 
     def receive(self, timeout=None) -> [dict, float]:
         """ Receive message from uart channel """

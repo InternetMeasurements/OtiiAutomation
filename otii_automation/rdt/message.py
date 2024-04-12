@@ -11,4 +11,5 @@ class Message(Enum):
     CONFIG_OK = 6
     NETWORK_INFO_OK = 7
     ERROR = 10
+    RST = 127
     TEST = 128

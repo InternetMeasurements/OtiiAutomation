@@ -7,9 +7,10 @@ import subprocess
 
 from .util import sync_clock, logger, network_status, parse_payload_size, upload_results, upload_logs, iface_up_cmd
 from .protocols import publish_rawmqtt
-from .at_command import config_radio_5G, config_radio_4G
+from .at_command import config_radio_5G, config_radio_4G, reset_nic
 from .protocols.mqtt import aoi_rawmqtt
 from ..rdt import Rdt
+from ..rdt.exception import RdtException
 from ..rdt.message import Message
 from ..rdt.udt.uart_serial import UdtUartSerial
 from ..environment import Environment as Env
@@ -123,12 +124,23 @@ def device():
                 logger.info('Experiment concluded')
                 break
             else:
-                raise Exception(f'Unknown command: {message}')
+                raise RdtException(f'Unknown command: {message}')
         except Exception as ex:
-            subprocess.run(iface_up_cmd.split(), stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             logger.error(f'Exception on device: {ex}')
             logger.error(traceback.format_exc())
-            rdt.send(Message.ERROR)
+
+            # Activate Ethernet interface
+            subprocess.run(iface_up_cmd.split(), stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+
+            # Reset NIC, if not a RdtException
+            if not isinstance(ex, RdtException):
+                reset_nic()
+
+            # Send error message
+            try:
+                rdt.send(Message.ERROR)
+            except Exception as ex:
+                logger.warning(f'Error message not sent: {ex}')
 
     # Upload final logs
     if server_config is not None:

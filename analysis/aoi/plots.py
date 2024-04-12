@@ -1,11 +1,10 @@
 import matplotlib.pyplot as plt
 import numpy as np
-import seaborn as sns
 
 from .parameters import *
 from ..util import convert_rate
+from ..aoi.parameters import RATES
 
-RATES = [1, 10, 100, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000]
 
 def plot_time_evolution(title, aoi_x, aoi_y, mean, median, **kwargs) -> None:
     fig, ax = plt.subplots(1, 1, figsize=(20, 5))
@@ -25,20 +24,20 @@ def plot_time_evolution(title, aoi_x, aoi_y, mean, median, **kwargs) -> None:
     plt.show()
 
 
-def plot_rates(rates, **kwargs) -> None:
-    fig, ax = plt.subplots(1, 1, figsize=(20, 5))
+def plot_rates(true_rates, **kwargs) -> None:
+    fig, ax = plt.subplots(1, 1)
     ax.set_title('True vs Nominal Rate')
     ax.set_xlabel('Nominal Rate [msg/s]')
     ax.set_ylabel('Real Rate [msg/s]')
-
-    for config, rate in rates.items():
-        ax.plot(RATES[:len(rate)], rate, marker='o', label=config)
+    for config, rate in true_rates.items():
+        nominal_rates = kwargs.get('rates', RATES)
+        ax.plot(nominal_rates[:len(rate)], rate, marker='o', label=config)
 
     ax.legend()
     plt.show()
 
 
-def plot_series(mean_aoi: dict, median_aoi: dict, total_energy: dict, true_rate: dict, **kwargs) -> None:
+def plot_series(mean_aoi: dict, median_aoi: dict, total_energy: dict, true_rate: dict, time: dict, **kwargs) -> None:
     # AoI vs Rate (mean)
     fig, ax = plt.subplots(1, 1, figsize=(20, 5))
     ax.set_xlabel('Rate [msg/s])')
@@ -62,12 +61,12 @@ def plot_series(mean_aoi: dict, median_aoi: dict, total_energy: dict, true_rate:
 
     # Energy vs Rate
     fig, ax = plt.subplots(1, 1, figsize=(20, 5))
-    ax.set_title(f'Energy over Rate')
+    ax.set_title(f'Power over Rate')
     ax.set_xlabel('Rate [msg/s])')
-    ax.set_ylabel('Energy [J]')
+    ax.set_ylabel('Power [W]')
 
     for config in total_energy.keys():
-        ax.plot(true_rate[config], total_energy[config], marker='o', label=config)
+        ax.plot(true_rate[config], np.divide(total_energy[config], time[config]), marker='o', label=config)
 
     fig.legend()
 
@@ -87,14 +86,14 @@ def plot_pareto(mean_aoi: dict, median_aoi: dict, total_energy: dict, time: dict
         'Q16': 'green',
         'Q1024': 'blue'
     }
-    markers = {'quic': 'o', 'tls': 'x'}
+    markers = {'quic': 'o', 'tls': 'x', 'tls-nagle-off': 'v'}
     front = []
     for config in mean_aoi.keys():
         queue = config.split('-')[-1]
         aoi = np.ravel(mean_aoi[config] if kwargs.get('metric', 'mean') == 'mean' else median_aoi[config])
         power = np.ravel(np.divide(total_energy[config], time[config]))
 
-        transport = 'quic' if 'quic' in config else 'tls'
+        transport = 'quic' if 'quic' in config else 'tls-nagle-off' if 'tls-nagle-off' in config else 'tls'
         config_front = []
         for i, (x, y) in enumerate(zip(aoi, power)):
             dominated = False
@@ -104,7 +103,7 @@ def plot_pareto(mean_aoi: dict, median_aoi: dict, total_energy: dict, time: dict
                     break
             if not dominated:
                 config_front.append((x, y))
-                front.append((config, RATE[i], (x, y)))
+                front.append((config, kwargs.get('rates', RATES)[i], (x, y)))
         if len(config_front) == 0:
             continue
 

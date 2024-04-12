@@ -1,9 +1,10 @@
 import json
 
+from .exception import RdtException
 from .message import Message
 from .util import crc_8, logger
 
-MAX_CTR = 2 ** 16
+MAX_CTR = 2 ** 8
 
 
 class Rdt:
@@ -36,7 +37,13 @@ class Rdt:
         protected = self.tx_ctr.to_bytes(2, byteorder='big') + encoded_msg
         rdt_pkt = f'{msg}{crc_8(protected)}'
         ack = False
+
+        reset_counter = 10
         while not ack:
+            # reset_counter -= 1
+            if reset_counter < 0:
+                self._reset()
+                raise RdtException('RDT send failed too many times')
             self.udt.send(rdt_pkt)
             ack = self._recv_ack() or kwargs.get('no_ack', False)
 
@@ -47,7 +54,14 @@ class Rdt:
 
     def receive(self, timeout=None) -> [dict, float]:
         msg = ''
+        reset_counter = 10
         while True:
+
+            # reset_counter -= 1
+            if reset_counter < 0:
+                self._reset()
+                raise RdtException('RDT receive failed too many times')
+
             rdt_pkt, timestamp = self.udt.receive(timeout=timeout)
             if len(rdt_pkt) < 3:
                 self._send_ack(nack=True)
@@ -98,3 +112,9 @@ class Rdt:
         else:
             logger.debug(f'Invalid ack: {ack}')
             return False
+
+    def _reset(self):
+        # self.tx_ctr = 0
+        # self.rx_ctr = 0
+        # self.udt.send(json.dumps({'code': Message.RST.value}))
+        logger.info("RDT reset")

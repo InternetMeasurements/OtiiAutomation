@@ -190,7 +190,7 @@ def compute_optimized_metrics(timestamps: list[dict]) -> tuple:
         start = projection[0]
 
     return (aoi_x, aoi_y,
-            round((area / window_length) / 10 ** 6, 2),
+            (area / window_length) / 10 ** 6,
             (1 / np.mean(gen_rate)), (1 / np.mean(rx_rate)),
             median)
 
@@ -210,11 +210,13 @@ def analyse_experiment(exp_data: dict, **kwargs) -> dict:
         true_rate = {}
         median_aoi_serie = {}
 
-        if N_ITERATION > 1:
-            print(f'\n*** Iteration {it} ***\n')
+        # if N_ITERATION > 1:
+        #     print(f'\n*** Iteration {it} ***\n')
 
         # Iterate over all possible configurations
-        for (d, p, q, t, r) in itertools.product(DELAY, PAYLOAD, QUEUE_LENGTH, TRANSPORT, kwargs.get('rate', RATE)):
+        for (d, p, q, t, r) in itertools.product(DELAY, PAYLOAD, QUEUE_LENGTH,
+                                                 kwargs.get('transport', TRANSPORT),
+                                                 kwargs.get('rate', RATES)):
             if (it, d, t, p, r, q) not in exp_data:
                 continue
 
@@ -268,9 +270,10 @@ def analyse_experiment(exp_data: dict, **kwargs) -> dict:
                     f'{"Observer Time":20}{"[ms]":10}{round((timestamps[-1]["rx_ts"] - timestamps[0]["rx_ts"]) / 10 ** 6, 2)}')
 
                 print(f'{"RPI Time":20}{"[ms]":10}{round(exp_data[(it, d, t, p, r, q)]["time"] * 1000, 2)}')
-                print(f'{"RPI Energy":20}{"[mJ]":10}{round(exp_data[(it, d, t, p, r, q)]["energy"], 2)}')
+                print(f'{"RPI Energy":20}{"[J]":10}{round(exp_data[(it, d, t, p, r, q)]["energy"], 2)}')
+                print(
+                    f'{"RPI Power":20}{"[W]":10}{round(exp_data[(it, d, t, p, r, q)]["energy"] / exp_data[(it, d, t, p, r, q)]["time"], 2)}')
                 print(f'{"Mean gen rate":20}{"[msg/s]":10}{round(gen_rate, 2)} (expected {r})')
-
                 print(f'{"Mean receive rate":20}{"[msg/s]":10}{round(rx_rate, 2)}')
                 print(f'{"Peak AoI":20}{"[ms]":10}{round(max(aoi_y), 2)}')
                 print(f'{"Mean AoI":20}{"[ms]":10}{round(mean_aoi, 2)}')
@@ -299,7 +302,7 @@ def analyse_experiment(exp_data: dict, **kwargs) -> dict:
             iteration_series['true_rate'][config] = iteration_series['true_rate'].get(config, []) + [true_rate[config]]
 
         if kwargs.get('draw_plots', True):
-            plot_series(mean_aoi_serie, median_aoi_serie, energy_serie, true_rate)
+            plot_series(mean_aoi_serie, median_aoi_serie, energy_serie, true_rate, time_serie)
 
     return iteration_series
 
@@ -324,7 +327,7 @@ def pareto(*args, **kwargs) -> None:
     fast_pareto(all_series, **kwargs)
 
 
-def fast_aoi(path: str = '../results/observer.json') -> None:
+def fast_aoi(path: str = '../results/observer.json') -> float:
     with open(path, 'rb') as fin:
         timestamps = orjson.loads(fin.read())
 
@@ -355,6 +358,8 @@ def fast_aoi(path: str = '../results/observer.json') -> None:
     # AoI time evolution
     plot_time_evolution('AoI time evolution', aoi_x, aoi_y, mean_aoi, median_aoi)
 
+    return median_aoi
+
 
 def fast_pareto(all_series: dict, **kwargs) -> dict:
     mean_aoi = {}
@@ -362,24 +367,32 @@ def fast_pareto(all_series: dict, **kwargs) -> dict:
     mean_energy = {}
     mean_time = {}
     true_rate = {}
+    aggregate_metric = kwargs.get('aggregate', 'median')
+
+    if aggregate_metric == 'mean':
+        def aggregate(x: list) -> list: return np.mean(x, axis=0).tolist()
+    elif aggregate_metric == 'median':
+        def aggregate(x: list) -> list: return np.median(x, axis=0).tolist()
+    else:
+        raise ValueError('Invalid aggregation method')
 
     for config, value in all_series['mean_aoi'].items():
-        mean_aoi[config] = np.mean(value, axis=0).tolist()
+        mean_aoi[config] = aggregate(value)
 
     for config, value in all_series['median_aoi'].items():
-        median_aoi[config] = np.mean(value, axis=0).tolist()
+        median_aoi[config] = aggregate(value)
 
     for config, value in all_series['energy'].items():
-        mean_energy[config] = np.mean(value, axis=0).tolist()
+        mean_energy[config] = aggregate(value)
 
     for config, value in all_series['time'].items():
-        mean_time[config] = np.mean(value, axis=0).tolist()
+        mean_time[config] = aggregate(value)
 
     for config, value in all_series['true_rate'].items():
-        true_rate[config] = np.mean(value, axis=0).tolist()
+        true_rate[config] = aggregate(value)
 
     plot_rates(true_rate, **kwargs)
-    plot_series(mean_aoi, median_aoi, mean_energy, true_rate, **kwargs)
+    plot_series(mean_aoi, median_aoi, mean_energy, true_rate, mean_time, **kwargs)
     front = plot_pareto(mean_aoi, median_aoi, mean_energy, mean_time, **kwargs)
 
     return front
